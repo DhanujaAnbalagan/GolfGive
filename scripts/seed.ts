@@ -125,40 +125,37 @@ async function createUsers(): Promise<Record<string, string>> {
   return ids;
 }
 
-async function seedCharities(adminId: string) {
+async function seedCharities() {
   console.log('\n🏌️  Seeding charities...');
 
   const charities = [
     {
       name: 'Golf For Good Foundation',
+      slug: 'golf-for-good',
       description: 'Supporting underprivileged youth access to golf programs and equipment across the UK.',
-      logo_url: 'https://placehold.co/100x100/10b981/white?text=GFG',
-      website: 'https://golfforgood.example.com',
-      is_active: true,
-      total_raised: 12500.00,
-      created_by: adminId,
+      image_url: 'https://placehold.co/100x100/10b981/white?text=GFG',
+      website_url: 'https://golfforgood.example.com',
+      featured: true,
     },
     {
       name: 'Links to Recovery',
+      slug: 'links-to-recovery',
       description: 'Using golf as therapy for veterans and individuals recovering from addiction.',
-      logo_url: 'https://placehold.co/100x100/3b82f6/white?text=L2R',
-      website: 'https://linkstorecovery.example.com',
-      is_active: true,
-      total_raised: 8750.00,
-      created_by: adminId,
+      image_url: 'https://placehold.co/100x100/3b82f6/white?text=L2R',
+      website_url: 'https://linkstorecovery.example.com',
+      featured: true,
     },
     {
       name: 'Green Heart Initiative',
+      slug: 'green-heart',
       description: 'Environmental conservation through golf course sustainability partnerships.',
-      logo_url: 'https://placehold.co/100x100/22c55e/white?text=GHI',
-      website: 'https://greenheartinitiative.example.com',
-      is_active: true,
-      total_raised: 5200.00,
-      created_by: adminId,
+      image_url: 'https://placehold.co/100x100/22c55e/white?text=GHI',
+      website_url: 'https://greenheartinitiative.example.com',
+      featured: false,
     },
   ];
 
-  const { data, error } = await supabase.from('charities').upsert(charities, { onConflict: 'name' }).select();
+  const { data, error } = await supabase.from('charities').upsert(charities, { onConflict: 'slug' }).select();
   if (error) console.error('  ❌ Charities error:', error.message);
   else console.log(`  ✅ ${data?.length || 0} charities seeded`);
 
@@ -168,7 +165,6 @@ async function seedCharities(adminId: string) {
 async function seedSubscriptions(user1Id: string, user2Id: string) {
   console.log('\n💳 Seeding subscriptions...');
 
-
   const nextMonth = new Date();
   nextMonth.setMonth(nextMonth.getMonth() + 1);
   const nextYear = new Date();
@@ -177,22 +173,20 @@ async function seedSubscriptions(user1Id: string, user2Id: string) {
   const subscriptions = [
     {
       user_id: user1Id,
-      plan: 'monthly',
+      plan_type: 'monthly',
       status: 'active',
       amount: 9.99,
       start_date: daysAgo(15),
-      end_date: nextMonth.toISOString(),
-      stripe_subscription_id: 'sub_demo_user1_monthly',
+      renewal_date: nextMonth.toISOString(),
       created_at: daysAgo(15),
     },
     {
       user_id: user2Id,
-      plan: 'yearly',
+      plan_type: 'yearly',
       status: 'active',
       amount: 89.99,
       start_date: daysAgo(45),
-      end_date: nextYear.toISOString(),
-      stripe_subscription_id: 'sub_demo_user2_yearly',
+      renewal_date: nextYear.toISOString(),
       created_at: daysAgo(45),
     },
   ];
@@ -307,7 +301,7 @@ async function seedWinners(drawIds: string[], user1Id: string) {
     {
       user_id: user1Id,
       draw_id: firstDrawId,
-      match_type: '3_match',
+      match_type: 3,
       prize_amount: 250.00,
       proof_url: 'https://example.com/proof/demo-proof-1.pdf',
       verification_status: 'approved',
@@ -322,25 +316,27 @@ async function seedWinners(drawIds: string[], user1Id: string) {
   else console.log(`  ✅ ${data?.length || 0} winners seeded`);
 }
 
-async function seedDonations(charities: { id: string }[], user1Id: string, user2Id: string) {
-  console.log('\n❤️  Seeding donations...');
+async function seedUserCharities(charities: { id: string }[], user1Id: string, user2Id: string) {
+  console.log('\n❤️  Seeding user charity choices...');
 
   if (!charities.length) return;
 
-  const donations: object[] = [];
+  const userSelections = [
+    {
+      user_id: user1Id,
+      charity_id: charities[0].id,
+      contribution_percentage: 15,
+    },
+    {
+      user_id: user2Id,
+      charity_id: charities[1].id,
+      contribution_percentage: 25,
+    },
+  ];
 
-  for (let i = 0; i < 8; i++) {
-    donations.push({
-      user_id: i % 2 === 0 ? user1Id : user2Id,
-      charity_id: charities[i % charities.length].id,
-      amount: [5, 10, 15, 25, 50][randomBetween(0, 4)],
-      created_at: daysAgo(randomBetween(1, 90)),
-    });
-  }
-
-  const { data, error } = await supabase.from('user_charities').insert(donations).select();
-  if (error) console.error('  ❌ Donations error:', error.message);
-  else console.log(`  ✅ ${data?.length || 0} donations seeded`);
+  const { data, error } = await supabase.from('user_charities').upsert(userSelections, { onConflict: 'user_id' }).select();
+  if (error) console.error('  ❌ User charity selection seeding error:', error.message);
+  else console.log(`  ✅ ${data?.length || 0} user charity choices seeded`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -360,14 +356,14 @@ async function main() {
     process.exit(1);
   }
 
-  const charities = await seedCharities(adminId);
+  const charities = await seedCharities();
   await seedSubscriptions(user1Id, user2Id);
   await seedGolfScores(user1Id, user2Id);
 
   const drawIds = await seedDraws();
   await seedDrawEntries(drawIds, user1Id, user2Id);
   await seedWinners(drawIds, user1Id);
-  await seedDonations(charities as { id: string }[], user1Id, user2Id);
+  await seedUserCharities(charities as { id: string }[], user1Id, user2Id);
 
   console.log('\n🎉 Seed complete!');
   console.log('\n📋 Demo Credentials:');
