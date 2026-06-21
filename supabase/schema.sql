@@ -50,19 +50,13 @@ CREATE POLICY "Allow users to update own profile" ON public.profiles
 -- Allow admins to view all profiles
 CREATE POLICY "Allow admins to view all profiles" ON public.profiles
     FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
-        )
+        (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
     );
 
 -- Allow admins to manage all profiles
 CREATE POLICY "Allow admins to manage all profiles" ON public.profiles
     FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
-        )
+        (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
     );
 
 -- ----------------------------------------------------

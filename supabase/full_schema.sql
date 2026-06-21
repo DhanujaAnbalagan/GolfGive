@@ -185,10 +185,10 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow users to view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Allow users to update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Allow admins to view all profiles" ON public.profiles FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
 );
 CREATE POLICY "Allow admins to manage all profiles" ON public.profiles FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')
+    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
 );
 
 -- 5.2 Golf Scores Policies

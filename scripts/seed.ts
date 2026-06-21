@@ -15,18 +15,55 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// Load environment variables
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = path.resolve(process.cwd(), '.env');
+
+let envLocalLoaded = false;
+let envLoaded = false;
+
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+  envLocalLoaded = true;
+}
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  envLoaded = true;
+}
+
+// Print debug info
+if (envLocalLoaded) {
+  console.log('.env.local loaded');
+}
+if (envLoaded) {
+  console.log('.env loaded');
+}
+if (!envLocalLoaded && !envLoaded) {
+  console.log('No .env.local or .env file found');
+}
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log(`SUPABASE_URL: ${SUPABASE_URL ? 'FOUND' : 'MISSING'}`);
+console.log(`SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY ? 'FOUND' : 'MISSING'}`);
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env variables.');
+  const missing: string[] = [];
+  if (!SUPABASE_URL) missing.push('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)');
+  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  console.error(`❌ Error: Missing required environment variables:\n${missing.map(v => `   - ${v}`).join('\n')}`);
   process.exit(1);
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+
 
 // ─── Demo Account Definitions ────────────────────────────────────────────────
 
@@ -243,15 +280,15 @@ async function seedDraws(): Promise<string[]> {
     draws.push({
       draw_month: month,
       draw_year: year,
-      draw_type: 'monthly',
-      status: isPast ? 'published' : 'pending',
+      draw_type: '5 Match',
+      status: isPast ? 'published' : 'draft',
       winning_numbers: isPast ? [randomBetween(1, 45), randomBetween(1, 45), randomBetween(1, 45), randomBetween(1, 45), randomBetween(1, 45)] : null,
       jackpot_amount: isPast ? 500.00 : 750.00,
       created_at: daysAgo(i * 30 + 5),
     });
   }
 
-  const { data, error } = await supabase.from('draws').upsert(draws, { onConflict: 'draw_month,draw_year,draw_type' }).select();
+  const { data, error } = await supabase.from('draws').upsert(draws, { onConflict: 'draw_month,draw_year' }).select();
   if (error) console.error('  ❌ Draws error:', error.message);
   else {
     console.log(`  ✅ ${data?.length || 0} draws seeded`);
@@ -297,20 +334,46 @@ async function seedWinners(drawIds: string[], user1Id: string) {
   // User 1 wins the first published draw
   const firstDrawId = drawIds[0];
 
-  const { data, error } = await supabase.from('winners').upsert([
-    {
-      user_id: user1Id,
-      draw_id: firstDrawId,
-      match_type: 3,
-      prize_amount: 250.00,
-      proof_url: 'https://example.com/proof/demo-proof-1.pdf',
-      verification_status: 'approved',
-      payment_status: 'paid',
-      review_notes: 'Demo winner - verified for submission showcase.',
-      verified_at: daysAgo(45),
-      paid_at: daysAgo(40),
-    },
-  ], { onConflict: 'user_id,draw_id' }).select();
+  // Check if winner already exists for this user and draw
+  const { data: existing } = await supabase
+    .from('winners')
+    .select('id')
+    .eq('user_id', user1Id)
+    .eq('draw_id', firstDrawId);
+
+  let data, error;
+
+  const winnerData = {
+    match_type: 3,
+    prize_amount: 250.00,
+    proof_url: 'https://example.com/proof/demo-proof-1.pdf',
+    verification_status: 'approved',
+    payment_status: 'paid',
+    review_notes: 'Demo winner - verified for submission showcase.',
+    verified_at: daysAgo(45),
+    paid_at: daysAgo(40),
+  };
+
+  if (existing && existing.length > 0) {
+    const res = await supabase
+      .from('winners')
+      .update(winnerData)
+      .eq('id', existing[0].id)
+      .select();
+    data = res.data;
+    error = res.error;
+  } else {
+    const res = await supabase
+      .from('winners')
+      .insert({
+        user_id: user1Id,
+        draw_id: firstDrawId,
+        ...winnerData,
+      })
+      .select();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) console.error('  ❌ Winners error:', error.message);
   else console.log(`  ✅ ${data?.length || 0} winners seeded`);
